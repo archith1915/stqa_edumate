@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Edumate Admin Panel</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background: #f7f8fa;
+    }
+    header {
+      background: #1a4df0;
+      color: white;
+      padding: 15px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .layout {
+      display: flex;
+      gap: 20px;
+      padding: 20px;
+    }
+    .panel {
+      flex: 1;
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    input, textarea {
+      display: block;
+      width: 100%;
+      margin-top: 8px;
+      margin-bottom: 10px;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+    }
+    button:hover { background: #1e4ecb; }
+    .card {
+      background: #ffffff;
+      border: 1px solid #ececec;
+      padding: 14px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .card-actions button {
+      margin-right: 8px;
+      margin-top: 6px;
+    }
+    .drawer {
+      position: fixed;
+      right: -420px;
+      top: 0;
+      width: 380px;
+      height: 100%;
+      background: white;
+      box-shadow: -4px 0 12px rgba(0,0,0,0.2);
+      padding: 20px;
+      transition: 0.3s;
+      overflow-y: auto;
+    }
+    .drawer.open { right: 0; }
+    #closeDetail {
+      float: right;
+      background: #d22;
+      border-radius: 50%;
+      padding: 6px 10px;
+      font-size: 18px;
+    }
+    #detailContent label {
+      font-size: 13px;
+      font-weight: 600;
+      display: block;
+      margin-top: 14px;
+    }
+    #detailContent input {
+      display: block;
+      width: 100%;
+      padding: 8px;
+      margin-top: 6px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      background: #333;
+      color: white;
+      padding: 12px 18px;
+      border-radius: 6px;
+      opacity: 0;
+      transition: 0.3s;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h2>Edumate Admin Panel</h2>
+  <div id="topInfo"></div>
+</header>
+
+<main class="layout">
+
+  <!-- ==================== COURSES ==================== -->
+  <section class="panel">
+    <h3>Course Management</h3>
+
+    <form id="courseForm">
+      <input id="courseName" placeholder="Course Name">
+      <input id="courseCredits" placeholder="Credits" type="number">
+      <input id="courseCategory" placeholder="Category">
+      <textarea id="courseDesc" placeholder="Description"></textarea>
+      <button type="submit">Save Course</button>
+      <button type="button" id="courseClear">Clear</button>
+    </form>
+
+    <div id="coursesGrid"></div>
+  </section>
+
+  <!-- ==================== STUDENTS ==================== -->
+  <section class="panel">
+    <h3>Student Management</h3>
+
+    <form id="studentForm">
+      <input id="stuId" placeholder="Student ID">
+      <input id="stuName" placeholder="Student Name">
+      <input id="stuPhone" placeholder="Phone (10 digits)">
+      <input id="stuEmail" placeholder="Email">
+      <input id="stuAddress" placeholder="Address">
+      <button type="submit">Save Student</button>
+    </form>
+
+    <input id="studentSearch" placeholder="Search students...">
+
+    <div id="studentsList"></div>
+  </section>
+
+</main>
+
+<div id="studentDetail" class="drawer">
+  <button id="closeDetail">✕</button>
+  <div id="detailContent"></div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module">
+
+/* ------------------------- FIREBASE ------------------------- */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+import {
+  getFirestore, collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc,
+  deleteDoc, onSnapshot, query, orderBy, where
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBPdqGREBAipfRsTZvGipbc638bN3lKiqE",
+  authDomain: "edumate-81035.firebaseapp.com",
+  projectId: "edumate-81035",
+  storageBucket: "edumate-81035.firebasestorage.app",
+  messagingSenderId: "782100907144",
+  appId: "1:782100907144:web:da0b5de9c301a1ae14cb3d",
+  measurementId: "G-TKYRDCJN7M"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+/* ------------------------- DOM ------------------------- */
+const $ = id => document.getElementById(id);
+
+const courseForm = $('courseForm');
+const coursesGrid = $('coursesGrid');
+
+const studentForm = $('studentForm');
+const studentsList = $('studentsList');
+const studentSearch = $('studentSearch');
+
+const studentDetail = $('studentDetail');
+const detailContent = $('detailContent');
+const closeDetail = $('closeDetail');
+
+const toastEl = $('toast');
+const topInfo = $('topInfo');
+
+let courses = [];
+let students = [];
+
+/* ------------------------- Toasts ------------------------- */
+function toast(msg, type="success") {
+  toastEl.textContent = msg;
+  toastEl.className = `toast show ${type}`;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toastEl.className = 'toast', 2000);
+}
+
+/* ------------------------- Validation ------------------------- */
+const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+const validPhone = p => /^\d{10}$/.test(p);
+const validNum = v => /^\d+$/.test(v) && +v >= 0 && +v <= 100;
+
+/* ------------------------- Listeners ------------------------- */
+const coursesCol = collection(db, "courses");
+const studentsCol = collection(db, "students");
+
+onSnapshot(query(coursesCol, orderBy("name")), snap => {
+  courses = [];
+  snap.forEach(d => courses.push({ id: d.id, ...d.data() }));
+  renderCourses();
+  topInfo.innerHTML = `${students.length} Students · ${courses.length} Courses`;
+  document.body.setAttribute("data-courses-loaded", "true");
+});
+
+onSnapshot(query(studentsCol, orderBy("name")), snap => {
+  students = [];
+  snap.forEach(d => students.push({ id: d.id, ...d.data() }));
+  renderStudents();
+  topInfo.innerHTML = `${students.length} Students · ${courses.length} Courses`;
+});
+
+/* ------------------------- Render Courses ------------------------- */
+function renderCourses() {
+  coursesGrid.innerHTML = "";
+  if (!courses.length) return coursesGrid.innerHTML = `<p>No courses yet.</p>`;
+
+  courses.forEach(c => {
+    const div = document.createElement('div');
+    div.className = "card";
+    div.innerHTML = `
+      <div class="card-title">${c.name}</div>
+      <div class="small">${c.credits} credits · ${c.category || ""}</div>
+      <div>${c.description || ""}</div>
+      <div class="card-actions">
+        <button class="btnQuickEnroll" data-id="${c.id}">Quick Enroll</button>
+        <button class="btnEditCourse" data-id="${c.id}">Edit</button>
+        <button class="btnDeleteCourse" data-id="${c.id}">Delete</button>
+      </div>
+    `;
+    coursesGrid.appendChild(div);
+  });
+
+  document.querySelectorAll(".btnQuickEnroll").forEach(b =>
+    b.onclick = e => openQuickEnroll(e.target.dataset.id)
+  );
+  document.querySelectorAll(".btnEditCourse").forEach(b =>
+    b.onclick = e => loadCourse(e.target.dataset.id)
+  );
+  document.querySelectorAll(".btnDeleteCourse").forEach(b =>
+    b.onclick = e => delCourse(e.target.dataset.id)
+  );
+}
+
+/* ------------------------- Render Students ------------------------- */
+function renderStudents(filter = "") {
+  const t = filter.toLowerCase().trim();
+  let list = t ? students.filter(s => s.name.toLowerCase().includes(t) || s.id.toLowerCase().includes(t)) : students;
+
+  studentsList.innerHTML = "";
+  if (!list.length) return studentsList.innerHTML = `<p>No students found.</p>`;
+
+  list.forEach(s => {
+    const div = document.createElement('div');
+    div.className = "card";
+    div.innerHTML = `
+      <div class="card-title">${s.name}
+        <div class="small">${s.id} · ${s.email || ""}</div>
+      </div>
+      <div class="card-actions">
+        <button class="btnEditProfile" data-id="${s.id}">Edit Profile</button>
+        <button class="btnDeleteStudent" data-id="${s.id}">Delete Student</button>
+      </div>
+    `;
+    studentsList.appendChild(div);
+  });
+
+  document.querySelectorAll(".btnEditProfile").forEach(b =>
+    b.onclick = e => openDetail(e.target.dataset.id)
+  );
+  document.querySelectorAll(".btnDeleteStudent").forEach(b =>
+    b.onclick = e => delStudent(e.target.dataset.id)
+  );
+}
+
+/* ------------------------- Course CRUD ------------------------- */
+courseForm.onsubmit = async e => {
+  e.preventDefault();
+
+  const name = $('courseName').value.trim();
+  const credits = +$('courseCredits').value;
+  const category = $('courseCategory').value.trim();
+  const desc = $('courseDesc').value.trim();
+
+  if (!name) return toast("Name required", "error");
+  if (credits < 1) return toast("Invalid credits", "error");
+
+  const norm = name.toLowerCase();
+
+  const q = query(coursesCol, where("norm", "==", norm));
+  const snap = await getDocs(q);
+
+  if (!courseForm.dataset.editing && snap.size) return toast("Course already exists", "error");
+
+  if (courseForm.dataset.editing) {
+    await updateDoc(doc(coursesCol, courseForm.dataset.editing), {
+      name, credits, category, description: desc, norm
+    });
+    delete courseForm.dataset.editing;
+    toast("Course updated");
+  } else {
+    await addDoc(coursesCol, { name, credits, category, description: desc, norm });
+    toast("Course added");
+  }
+
+  courseForm.reset();
+};
+$('courseClear').onclick = () => { delete courseForm.dataset.editing; courseForm.reset(); };
+
+async function loadCourse(id) {
+  const snap = await getDoc(doc(coursesCol, id));
+  if (!snap.exists()) return;
+  const c = snap.data();
+  $('courseName').value = c.name;
+  $('courseCredits').value = c.credits;
+  $('courseCategory').value = c.category || "";
+  $('courseDesc').value = c.description || "";
+  courseForm.dataset.editing = id;
+}
+
+async function delCourse(id) {
+  if (!confirm("Delete course?")) return;
+  await deleteDoc(doc(coursesCol, id));
+
+  const all = await getDocs(studentsCol);
+  const ops = [];
+  all.forEach(snap => {
+    const s = snap.data();
+    if (s.enrolled?.includes(id)) {
+      const updated = s.enrolled.filter(x => x !== id);
+      const cd = { ...(s.courseData || {}) };
+      delete cd[id];
+      ops.push(updateDoc(snap.ref, { enrolled: updated, courseData: cd }));
+    }
+  });
+  await Promise.all(ops);
+
+  toast("Course deleted");
+}
+
+/* ------------------------- Student CRUD ------------------------- */
+studentForm.onsubmit = async e => {
+  e.preventDefault();
+
+  const id = $('stuId').value.trim();
+  const name = $('stuName').value.trim();
+  const phone = $('stuPhone').value.trim();
+  const email = $('stuEmail').value.trim();
+  const address = $('stuAddress').value.trim();
+
+  if (!id || !name) return toast("ID + Name required", "error");
+  if (phone && !validPhone(phone)) return toast("Phone must be 10 digits", "error");
+  if (email && !validEmail(email)) return toast("Invalid email", "error");
+
+  const ref = doc(studentsCol, id);
+  const snap = await getDoc(ref);
+
+  if (snap.exists() && !studentForm.dataset.editing)
+    return toast("Student ID already exists", "error");
+
+  await setDoc(ref, {
+    id, name, phone, email, address,
+    enrolled: snap.exists() ? snap.data().enrolled : [],
+    courseData: snap.exists() ? snap.data().courseData : {}
+  });
+
+  delete studentForm.dataset.editing;
+  studentForm.reset();
+  toast("Student saved");
+};
+
+async function delStudent(id) {
+  if (!confirm("Delete student?")) return;
+  await deleteDoc(doc(studentsCol, id));
+  toast("Student deleted");
+}
+
+/* ------------------------- Student Detail Drawer ------------------------- */
+closeDetail.onclick = () => {
+  studentDetail.classList.remove("open");
+  detailContent.innerHTML = "";
+};
+
+async function openDetail(id) {
+  const snap = await getDoc(doc(studentsCol, id));
+  if (!snap.exists()) return;
+
+  const s = snap.data();
+
+  detailContent.innerHTML = `
+    <h3>Edit Profile — ${s.name}</h3>
+    <label>Name</label><input id="detailName" value="${s.name}">
+    <label>Phone</label><input id="detailPhone" value="${s.phone || ''}">
+    <label>Email</label><input id="detailEmail" value="${s.email || ''}">
+    <label>Address</label><input id="detailAddress" value="${s.address || ''}">
+    <button id="saveProfile">Save Profile</button>
+
+    <hr>
+    <h4>Enrolled Courses</h4>
+    ${s.enrolled?.length ? s.enrolled.map(cid => {
+      const c = courses.find(x => x.id === cid);
+      const cd = s.courseData?.[cid] || { marks: 0, attendance: 0 };
+      return `
+        <div class="card">
+          <strong>${c?.name || "Unknown"}</strong>
+          <label>Marks</label><input id="marks_${cid}" value="${cd.marks}">
+          <label>Attendance</label><input id="att_${cid}" value="${cd.attendance}">
+          <button class="saveMarksBtn" data-id="${cid}">Save</button>
+          <button class="unenrollBtn" data-id="${cid}">Un-enroll</button>
+        </div>
+      `;
+    }).join("") : `<div>No enrollments.</div>`}
+
+    <hr>
+    <h4>Available Courses</h4>
+    ${courses.filter(c => !s.enrolled?.includes(c.id)).map(c => `
+      <div class="card">
+        <strong>${c.name}</strong>
+        <button class="enrollBtn" data-id="${c.id}">Enroll</button>
+      </div>
+    `).join("")}
+  `;
+
+  studentDetail.classList.add("open");
+
+  $('saveProfile').onclick = () => saveProfile(id);
+
+  detailContent.querySelectorAll(".saveMarksBtn").forEach(b =>
+    b.onclick = () => saveScore(id, b.dataset.id)
+  );
+
+  detailContent.querySelectorAll(".unenrollBtn").forEach(b =>
+    b.onclick = () => unenroll(id, b.dataset.id)
+  );
+
+  detailContent.querySelectorAll(".enrollBtn").forEach(b =>
+    b.onclick = () => enroll(id, b.dataset.id)
+  );
+}
+
+/* ------------------------- Drawer Short Functions ------------------------- */
+async function saveProfile(id) {
+  const name = $('detailName').value.trim();
+  const phone = $('detailPhone').value.trim();
+  const email = $('detailEmail').value.trim();
+  const address = $('detailAddress').value.trim();
+
+  if (phone && !validPhone(phone)) return toast("Phone must be 10 digits", "error");
+  if (email && !validEmail(email)) return toast("Invalid email", "error");
+
+  await updateDoc(doc(studentsCol, id), { name, phone, email, address });
+  toast("Student info updated");
+  openDetail(id);
+}
+
+async function saveScore(sid, cid) {
+  const m = $('marks_' + cid).value;
+  const a = $('att_' + cid).value;
+
+  if (!validNum(m)) return toast("Marks invalid", "error");
+  if (!validNum(a)) return toast("Attendance invalid", "error");
+
+  const ref = doc(studentsCol, sid);
+  const snap = await getDoc(ref);
+  const s = snap.data();
+
+  const cd = { ...(s.courseData || {}) };
+  cd[cid] = { marks: +m, attendance: +a };
+
+  await updateDoc(ref, { courseData: cd });
+  toast("Course data saved");
+  openDetail(sid);
+}
+
+async function unenroll(sid, cid) {
+  const ref = doc(studentsCol, sid);
+  const snap = await getDoc(ref);
+  const s = snap.data();
+
+  const updated = s.enrolled.filter(x => x !== cid);
+  const cd = { ...(s.courseData || {}) };
+  delete cd[cid];
+
+  await updateDoc(ref, { enrolled: updated, courseData: cd });
+  toast("Un-enrolled");
+  openDetail(sid);
+}
+
+async function enroll(sid, cid) {
+  const ref = doc(studentsCol, sid);
+  const snap = await getDoc(ref);
+  const s = snap.data();
+
+  if (s.enrolled.includes(cid)) return toast("Already enrolled", "error");
+
+  const updated = [...s.enrolled, cid];
+  const cd = { ...(s.courseData || {}) };
+  cd[cid] = { marks: 0, attendance: 0 };
+
+  await updateDoc(ref, { enrolled: updated, courseData: cd });
+  toast("Enrolled");
+  openDetail(sid);
+}
+
+/* ------------------------- Quick Enroll Popup ------------------------- */
+function openQuickEnroll(cid) {
+  const box = document.createElement("div");
+  box.className = "card";
+  box.style.position = "fixed";
+  box.style.top = "80px";
+  box.style.right = "20px";
+  box.style.width = "260px";
+  box.style.zIndex = 1000;
+  box.style.boxShadow = "0 4px 12px rgba(0,0,0,0.2)";
+
+  box.innerHTML = `
+    <h4>Select Student</h4>
+    ${students.map(s => `
+      <button class="quickEnrollSelect" data-sid="${s.id}" style="width:100%;margin-bottom:8px;">
+        ${s.name} (${s.id})
+      </button>
+    `).join("")}
+    <button id="closeQuickEnroll">Close</button>
+  `;
+
+  document.body.appendChild(box);
+
+  box.querySelectorAll(".quickEnrollSelect").forEach(btn =>
+    btn.onclick = () => {
+      enroll(btn.dataset.sid, cid);
+      box.remove();
+    }
+  );
+
+  $('closeQuickEnroll').onclick = () => box.remove();
+}
+
+/* ------------------------- Search ------------------------- */
+studentSearch.oninput = e => renderStudents(e.target.value);
+
+/* Initial focus */
+$('stuId').focus();
+
+</script>
+
+</body>
+</html>
