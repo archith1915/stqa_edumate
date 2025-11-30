@@ -115,9 +115,66 @@
 
 <body>
 
+<div id="loginWrapper" style="
+  position: fixed; inset:0;
+  background: linear-gradient(135deg, #e8eeff, #f7f8fa);
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+  z-index:2000;
+">
+  <div style="
+    width:330px;
+    background:white;
+    padding:32px;
+    border-radius:14px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.12);
+    text-align:center;
+    border:1px solid #e5e7eb;
+  ">
+    
+    <h2 style="color:#1a4df0; margin-bottom:6px; font-weight:700;">
+      Edumate Admin Login
+    </h2>
+    <p style="color:#555; margin-bottom:18px; font-size:14px;">
+      Please sign in to continue
+    </p>
+
+    <input id="loginEmail" placeholder="Email" style="
+      width:100%; padding:12px; margin-top:10px;
+      border-radius:8px; border:1px solid #cbd5e1;
+      font-size:15px; box-sizing:border-box;
+    ">
+
+    <input id="loginPass" type="password" placeholder="Password" style="
+      width:100%; padding:12px; margin-top:12px;
+      border-radius:8px; border:1px solid #cbd5e1;
+      font-size:15px; box-sizing:border-box;
+    ">
+
+    <button id="loginBtn" style="
+      width:100%; padding:12px; margin-top:20px;
+      border:none; border-radius:8px;
+      background:#2563eb; color:white;
+      font-size:15px; cursor:pointer;
+      transition:0.2s;
+    "
+    onmouseover="this.style.background='#1e4ecb'"
+    onmouseout="this.style.background='#2563eb'">
+      Login
+    </button>
+
+    <p id="loginError" style="color:#d22;margin-top:14px;font-size:14px;"></p>
+  </div>
+</div>
+
+
+<div id="adminPanel" style="display:none;">
+
 <header>
   <h2>Edumate Admin Panel</h2>
   <div id="topInfo"></div>
+  <button id="logoutBtn" style="background:#d22;">Logout</button>
+
 </header>
 
 <main class="layout">
@@ -186,6 +243,46 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+
+
+  /* ------------------------- AUTHENTICATION ------------------------- */
+
+  import {
+  getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+
+const auth = getAuth(app);
+
+/* ------------------------- AUTH UI ------------------------- */
+const loginWrapper = document.getElementById("loginWrapper");
+const adminPanel = document.getElementById("adminPanel");
+const loginBtn = document.getElementById("loginBtn");
+const loginEmail = document.getElementById("loginEmail");
+const loginPass = document.getElementById("loginPass");
+const loginError = document.getElementById("loginError");
+
+loginBtn.onclick = () => {
+  const email = loginEmail.value.trim();
+  const pass = loginPass.value.trim();
+  loginError.textContent = "";
+
+  signInWithEmailAndPassword(auth, email, pass)
+    .catch(err => loginError.textContent = "Invalid email or password");
+};
+
+onAuthStateChanged(auth, user => {
+  if (user) {
+    loginWrapper.style.display = "none";
+    adminPanel.style.display = "block";
+  } else {
+    adminPanel.style.display = "none";
+    loginWrapper.style.display = "flex";
+  }
+});
+
+
+document.getElementById("logoutBtn").onclick = () => signOut(auth);
+
 
 /* ------------------------- DOM ------------------------- */
 const $ = id => document.getElementById(id);
@@ -348,7 +445,6 @@ async function loadCourse(id) {
 }
 
 async function delCourse(id) {
-  if (!confirm("Delete course?")) return;
   await deleteDoc(doc(coursesCol, id));
 
   const all = await getDocs(studentsCol);
@@ -399,7 +495,6 @@ studentForm.onsubmit = async e => {
 };
 
 async function delStudent(id) {
-  if (!confirm("Delete student?")) return;
   await deleteDoc(doc(studentsCol, id));
   toast("Student deleted");
 }
@@ -571,6 +666,9 @@ studentSearch.oninput = e => renderStudents(e.target.value);
 $('stuId').focus();
 
 </script>
+
+</div> <!-- adminPanel -->
+
 
 </body>
 </html>
