@@ -21,6 +21,6 @@ module.exports = defineConfig({
     responseTimeout: 30000,
     requestTimeout: 5000,
     // Disable video for faster tests
-    video: false,
+    video: true,
   },
 });
